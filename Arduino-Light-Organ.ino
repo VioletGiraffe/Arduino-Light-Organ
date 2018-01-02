@@ -32,6 +32,8 @@ void setup()
 
 void setupADC()
 {
+	constexpr auto ADC_CHANNEL = ADC_CHANNEL_7; // CH7 is pin A0
+
 	pmc_enable_periph_clk(ID_ADC); // Enable ADC clocking
 	adc_init(ADC, SystemCoreClock, ADC_FREQ_MAX, ADC_STARTUP_FAST); // initialize, set maximum posibble speed
 	adc_set_resolution(ADC, ADC_12_BITS);
@@ -41,10 +43,11 @@ void setupADC()
 	adc_stop_sequencer(ADC); // not using it
 	adc_disable_tag(ADC); // it has to do with sequencer, not using it
 	adc_disable_ts(ADC); // deisable temperature sensor
-	adc_disable_channel_differential_input(ADC, ADC_CHANNEL_7);
-	adc_configure_trigger(ADC, ADC_TRIG_SW, 1); // triggering from software, freerunning mode
+	adc_disable_channel_differential_input(ADC, ADC_CHANNEL);
+	adc_configure_trigger(ADC, ADC_TRIG_SW, 1); // Free-running mode
 	adc_disable_all_channel(ADC);
-	adc_enable_channel(ADC, ADC_CHANNEL_7); // just one channel enabled
+	adc_enable_channel(ADC, ADC_CHANNEL); // just one channel enabled
+	adc_enable_interrupt(ADC, ADC_IER_DRDY);
 	adc_start(ADC);
 }
 
@@ -57,9 +60,12 @@ volatile bool samplingWindowFull = false;
 constexpr int FHT_N = 256;
 uint8_t previousFhtValues[FHT_N / 2]; // The previous set of FHT results, used for optimizing the screen redraw
 
-ISR(ADC_vect) //when new ADC value ready
+void ADC_IrqHandler() //when new ADC value ready
 {
-	const uint16_t sample = (uint16_t)ADC->ADC_CDR[7];
+	if ((adc_get_status(ADC) & ADC_ISR_DRDY) != ADC_ISR_DRDY)
+		return;
+
+	const uint16_t sample = adc_get_latest_value(ADC) & 0xFFFF;
 
 	if (sample > maxSampleValue)
 		maxSampleValue = sample;
